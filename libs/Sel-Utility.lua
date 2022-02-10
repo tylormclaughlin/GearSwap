@@ -477,24 +477,22 @@ function set_elemental_obi_cape_ring(spell, spellMap)
         return
     end
 
-	gear.ElementalObi.name = gear.default.obi_waist
-	
+	--[[
 	if spell.element == world.weather_element or spell.element == world.day_element and item_available("Twilight Cape") then
 		gear.ElementalCape.name = "Twilight Cape"
 	else
 		gear.ElementalCape.name = gear.default.obi_back
 	end
-
-	if spell.english:endswith('helix') then
+	]]
+	if spell.english:endswith('helix') or spell.english:endswith('helix II') then
 		if item_available("Orpheus's Sash") then
 			local distance = spell.target.distance - spell.target.model_size
 			local orpheus_intensity = (16 - (distance <= 1 and 1 or distance >= 15 and 15 or distance))
 				if orpheus_intensity > 5 then
-					gear.ElementalObi.name = "Orpheus's Sash"
+					equip({waist="Orpheus's Sash"})
 				end
 			end
 	elseif is_nuke(spell, spellMap) then
-	
 		local distance = spell.target.distance - spell.target.model_size
 		local single_obi_intensity = 0
 		local orpheus_intensity = 0
@@ -527,11 +525,11 @@ function set_elemental_obi_cape_ring(spell, spellMap)
 		end
 
 		if hachirin_intensity >= single_obi_intensity and hachirin_intensity >= orpheus_intensity and hachirin_intensity >= 5 then
-			gear.ElementalObi.name = "Hachirin-no-Obi"
+			equip({waist="Hachirin-no-Obi"})
 		elseif single_obi_intensity >= orpheus_intensity and single_obi_intensity >= 5 then
-			gear.ElementalObi.name = data.elements.obi_of[spell.element]
+			equip({waist=data.elements.obi_of[spell.element]})
 		elseif orpheus_intensity >= 5 then
-			gear.ElementalObi.name = "Orpheus's Sash"
+			equip({waist="Orpheus's Sash"})
 		end
 	
 		if spell.element == world.day_element and spell.english ~= 'Impact' and not spell.skill == 'Divine Magic' and item_available("Zodiac Ring") then
@@ -1009,7 +1007,7 @@ function check_midaction(spell, spellMap, eventArgs)
 	if os.clock() < next_cast and not state.RngHelper.value then
 		if eventArgs and not (spell.type:startswith('BloodPact') and state.Buff["Astral Conduit"]) then
 			eventArgs.cancel = true
-			if delayed_cast == '' then
+			if delayed_cast == '' and state.MiniQueue.value then
 				windower.send_command:schedule((next_cast - os.clock()),'gs c delayedcast')
 			end
 			delayed_cast = spell.english
@@ -1995,11 +1993,11 @@ end
 
 function is_nuke(spell, spellMap)
 	if (
-		(spell.skill == 'Elemental Magic' and spellMap ~= 'ElementalEnfeeble') or
+		(spell.skill == 'Elemental Magic' and spellMap ~= 'ElementalEnfeeble' and spell.english ~= 'Impact') or
 	    (player.main_job == 'BLU' and spell.skill == 'Blue Magic' and spellMap and spellMap:contains('Magical')) or
 		(player.main_job == 'NIN' and spell.skill == 'Ninjutsu' and spellMap and spellMap:contains('ElementalNinjutsu')) or
-		spell.english == 'Comet' or spell.english == 'Meteor' or spell.english == 'Impact' or spell.english == 'Death' or
-		spell.english:startswith('Banish') or spell.english:startswith('Drain') or spell.english:startswith('Aspir')
+		spell.english == 'Comet' or spell.english == 'Meteor' or spell.english == 'Death' or spell.english:startswith('Banish')
+		or spell.english:startswith('Drain') or spell.english:startswith('Aspir')
 		) then
 		
 		return true
@@ -2122,29 +2120,42 @@ function face_target()
 end
 
 function check_ammo()
- 
 	if state.AutoAmmoMode.value and player.equipment.range and not player.in_combat and not world.in_mog_house and not useItem then
-		local ammo_to_stock
-		if type(ammostock) == 'table' and ammostock[data.equipment.rema_ranged_weapons_ammo[player.equipment.range]] then
-			ammo_to_stock = ammostock[data.equipment.rema_ranged_weapons_ammo[player.equipment.range]]
+		if type(ammostock) == 'table' then
+			for ammo, ammo_count in pairs(ammostock) do
+				if count_total_ammo(ammo) < ammo_count then
+					if item_available(data.equipment.rema_ammo_pouch_of[ammo]) then
+						if ((get_usable_item(data.equipment.rema_ammo_pouch_of[ammo]).next_use_time) + 18000 - os.time()) < 10 then
+							add_to_chat(217, "You're low on " .. ammo .. ", using " .. data.equipment.rema_ammo_pouch_of[ammo] .. ".")
+							useItem = true
+							useItemName = data.equipment.rema_ammo_pouch_of[ammo]
+							useItemSlot = 'waist'
+							return true
+						end
+					elseif data.equipment.rema_ammo_weapon_of[ammo] == player.equipment.range and get_usable_item(player.equipment.range).usable then
+						windower.chat.input("/item '".. player.equipment.range .."' <me>")
+						add_to_chat(217,"You're low on ".. ammo ..", using ".. player.equipment.range ..".")
+						tickdelay = os.clock() + 5
+						return true
+					end
+				end
+			end
 		else
-			ammo_to_stock = ammostock
-		end
-	
-		if data.equipment.rema_ranged_weapons:contains(player.equipment.range) and count_total_ammo(data.equipment.rema_ranged_weapons_ammo[player.equipment.range]) < ammo_to_stock then
-			if get_usable_item(player.equipment.range).usable then
-				windower.chat.input("/item '"..player.equipment.range.."' <me>")
-				add_to_chat(217,"You're low on "..data.equipment.rema_ranged_weapons_ammo[player.equipment.range]..", using "..player.equipment.range..".")
-				tickdelay = os.clock() + 2
-				return true
-			elseif item_available(data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]) then
-				if ((get_usable_item(data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]).next_use_time) + 18000 -os.time()) < 10 then
-					add_to_chat(217,"You're low on "..data.equipment.rema_ranged_weapons_ammo[player.equipment.range]..", using "..data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]..".")
-					useItem = true
-					useItemName = data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]
-					useItemSlot = 'waist'
+			if data.equipment.rema_ranged_weapons:contains(player.equipment.range) and count_total_ammo(data.equipment.rema_ranged_weapons_ammo[player.equipment.range]) < ammostock then
+				if get_usable_item(player.equipment.range).usable then
+					windower.chat.input("/item '"..player.equipment.range.."' <me>")
+					add_to_chat(217,"You're low on "..data.equipment.rema_ranged_weapons_ammo[player.equipment.range]..", using "..player.equipment.range..".")
+					tickdelay = os.clock() + 5
 					return true
-				end				
+				elseif item_available(data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]) then
+					if ((get_usable_item(data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]).next_use_time) + 18000 -os.time()) < 10 then
+						add_to_chat(217,"You're low on "..data.equipment.rema_ranged_weapons_ammo[player.equipment.range]..", using "..data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]..".")
+						useItem = true
+						useItemName = data.equipment.rema_ranged_weapons_ammo_pouch[player.equipment.range]
+						useItemSlot = 'waist'
+						return true
+					end
+				end
 			end
 		end
 	end
@@ -2237,10 +2248,10 @@ function check_ws_acc()
 end
 
 function is_dual_wielding()
-	if ((player.equipment.main and not (player.equipment.sub == 'empty' or player.equipment.sub:contains('Grip') or player.equipment.sub:contains('Strap') or res.items[item_name_to_id(player.equipment.sub)].shield_size))) then
-		return true
-	else
-		return false
+	if player.equipment.main and player.equipment.sub and player.equipment.sub ~= 'empty' then
+		if data.skills.one_handed_combat:contains(res.items[item_name_to_id(player.equipment.sub)].skill) then
+			return true
+		end
 	end
 end
 
@@ -2378,7 +2389,7 @@ windower.raw_register_event('outgoing chunk',function(id,data,modified,is_inject
 			if sets.Kiting and not (player.status == 'Event' or (os.clock() < (next_cast + 1)) or pet_midaction() or (os.clock() < (petWillAct + 2))) then
 				send_command('gs c forceequip')
 			end
-			if state.RngHelper.value then
+			if state.RngHelper.value and not buffactive['Hover Shot'] then
 				send_command('gs rh clear')
 			end
 			if buffup~= '' then
